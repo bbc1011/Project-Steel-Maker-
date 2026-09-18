@@ -20,35 +20,45 @@ class EbayClient:
         self._token = None
         self._expires_at = 0.0
 
-    def _get_app_token(self) -> str:
-        if self._token and time.time() < self._expires_at - 60:
-            return self._token
-
-        raw = f"{self.client_id}:{self.client_secret}".encode("utf-8")
-        encoded = base64.b64encode(raw).decode("ascii")
-
-        headers = {
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        data = {
-            "grant_type": "client_credentials",
-            # Browse API access uses the appropriate application scope.
-            "scope": "https://api.ebay.com/oauth/api_scope",
-        }
-
-        response = requests.post(
-            self.OAUTH_URL,
-            headers=headers,
-            data=data,
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        payload = response.json()
-
-        self._token = payload["access_token"]
-        self._expires_at = time.time() + int(payload.get("expires_in", 7200))
+def _get_app_token(self) -> str:
+    if self._token and time.time() < self._expires_at - 60:
         return self._token
+
+    print("eBay Client ID present:", bool(self.client_id))
+    print("eBay Client Secret present:", bool(self.client_secret))
+    print("eBay Client ID length:", len(self.client_id))
+    print("eBay Client Secret length:", len(self.client_secret))
+
+    raw = f"{self.client_id}:{self.client_secret}".encode("utf-8")
+    encoded = base64.b64encode(raw).decode("ascii")
+
+    headers = {
+        "Authorization": f"Basic {encoded}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    data = {
+        "grant_type": "client_credentials",
+        "scope": "https://api.ebay.com/oauth/api_scope",
+    }
+
+    response = requests.post(
+        self.OAUTH_URL,
+        headers=headers,
+        data=data,
+        timeout=self.timeout,
+    )
+
+    print("eBay OAuth status:", response.status_code)
+    print("eBay OAuth response:", response.text)
+
+    response.raise_for_status()
+
+    payload = response.json()
+
+    self._token = payload["access_token"]
+    self._expires_at = time.time() + int(payload.get("expires_in", 7200))
+    return self._token
 
     def search(self, query: str, max_results: int = 20, max_price: float | None = None,
                fixed_price_only: bool = True) -> List[Listing]:
