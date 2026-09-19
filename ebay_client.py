@@ -21,7 +21,7 @@ class EbayClient:
         self._expires_at = 0.0
 
     def _get_app_token(self) -> str:
-    if self._token and time.time() < self._expires_at - 60:
+        if self._token and time.time() < self._expires_at - 60:
         return self._token
 
     print("eBay Client ID present:", bool(self.client_id))
