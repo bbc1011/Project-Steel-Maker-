@@ -11,74 +11,70 @@ class EbayClient:
     OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
     SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 
-    def __init__(self, client_id: str, client_secret: str, marketplace_id: str,
-                 timeout: int = 20, currency: str = "USD"):
-        if not client_id or not client_secret:
-            raise ValueError("client_id and client_secret are required")
-        if not marketplace_id:
-            raise ValueError("marketplace_id is required")
-        if timeout <= 0:
-            raise ValueError("timeout must be greater than zero")
-        if not currency:
-            raise ValueError("currency is required")
-
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        marketplace_id: str,
+        timeout: int = 20,
+    ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.marketplace_id = marketplace_id
         self.timeout = timeout
-        self.currency = currency.upper()
-        self._token: str | None = None
+        self._token = None
         self._expires_at = 0.0
 
     def _get_app_token(self) -> str:
         if self._token and time.time() < self._expires_at - 60:
             return self._token
 
-    print("eBay Client ID present:", bool(self.client_id))
-    print("eBay Client Secret present:", bool(self.client_secret))
-    print("eBay Client ID length:", len(self.client_id))
-    print("eBay Client Secret length:", len(self.client_secret))
+        print("eBay Client ID present:", bool(self.client_id))
+        print("eBay Client Secret present:", bool(self.client_secret))
+        print("eBay Client ID length:", len(self.client_id))
+        print("eBay Client Secret length:", len(self.client_secret))
 
-    raw = f"{self.client_id}:{self.client_secret}".encode("utf-8")
-    encoded = base64.b64encode(raw).decode("ascii")
+        raw = f"{self.client_id}:{self.client_secret}".encode("utf-8")
+        encoded = base64.b64encode(raw).decode("ascii")
 
-    headers = {
-        "Authorization": f"Basic {encoded}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
+        headers = {
+            "Authorization": f"Basic {encoded}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
 
-    data = {
-        "grant_type": "client_credentials",
-        "scope": "https://api.ebay.com/oauth/api_scope",
-    }
+        data = {
+            "grant_type": "client_credentials",
+            "scope": "https://api.ebay.com/oauth/api_scope",
+        }
 
-    response = requests.post(
-        self.OAUTH_URL,
-        headers=headers,
-        data=data,
-        timeout=self.timeout,
-    )
+        response = requests.post(
+            self.OAUTH_URL,
+            headers=headers,
+            data=data,
+            timeout=self.timeout,
+        )
 
-    print("eBay OAuth status:", response.status_code)
-    print("eBay OAuth response:", response.text)
+        print("eBay OAuth status:", response.status_code)
+        print("eBay OAuth response:", response.text)
 
-    response.raise_for_status()
+        response.raise_for_status()
 
-    payload = response.json()
+        payload = response.json()
 
-    self._token = payload["access_token"]
-    self._expires_at = time.time() + int(payload.get("expires_in", 7200))
-    return self._token
+        self._token = payload["access_token"]
+        self._expires_at = time.time() + int(
+            payload.get("expires_in", 7200)
+        )
 
-    def search(self, query: str, max_results: int = 20, max_price: float | None = None,
-               fixed_price_only: bool = True) -> List[Listing]:
-        query = query.strip()
-        if not query:
-            raise ValueError("query must not be empty")
-        if max_results <= 0:
-            raise ValueError("max_results must be greater than zero")
-        if max_price is not None and max_price < 0:
-            raise ValueError("max_price must not be negative")
+        return self._token
+
+    def search(
+        self,
+        query: str,
+        max_results: int = 20,
+        max_price: float | None = None,
+        fixed_price_only: bool = True,
+    ) -> List[Listing]:
 
         token = self._get_app_token()
 
@@ -89,8 +85,12 @@ class EbayClient:
         }
 
         filters = []
+
         if max_price is not None:
-            filters.append(f"price:[0..{max_price}],priceCurrency:{self.currency}")
+            filters.append(
+                f"price:[0..{max_price}],priceCurrency:USD"
+            )
+
         if fixed_price_only:
             filters.append("buyingOptions:{FIXED_PRICE}")
 
@@ -98,6 +98,7 @@ class EbayClient:
             "q": query,
             "limit": min(max_results, 200),
         }
+
         if filters:
             params["filter"] = ",".join(filters)
 
@@ -107,30 +108,38 @@ class EbayClient:
             params=params,
             timeout=self.timeout,
         )
+
         response.raise_for_status()
         payload: Dict[str, Any] = response.json()
 
         listings: List[Listing] = []
-        for item in payload.get("itemSummaries") or []:
+
+        for item in payload.get("itemSummaries", []):
             price = item.get("price") or {}
             shipping_cost = 0.0
 
-            shipping = (item.get("shippingOptions") or [])
+            shipping = item.get("shippingOptions") or []
+
             if shipping:
                 shipping_cost = float(
-                    ((shipping[0].get("shippingCost") or {}).get("value")) or 0
+                    ((shipping[0].get("shippingCost") or {}).get("value"))
+                    or 0
                 )
 
             image_url = None
+
             if item.get("image"):
                 image_url = item["image"].get("imageUrl")
 
             additional_images = []
+
             for img in item.get("additionalImages") or []:
                 if img.get("imageUrl"):
                     additional_images.append(img["imageUrl"])
 
-            image_urls = [u for u in [image_url, *additional_images] if u]
+            image_urls = [
+                u for u in [image_url, *additional_images] if u
+            ]
 
             listings.append(
                 Listing(
@@ -138,13 +147,20 @@ class EbayClient:
                     title=item.get("title", "Untitled"),
                     url=item.get("itemWebUrl", ""),
                     price=float(price.get("value") or 0),
-                    currency=price.get("currency") or self.currency,
+                    currency=price.get("currency", "USD"),
                     shipping=shipping_cost,
                     condition=item.get("condition"),
                     image_urls=image_urls,
-                    seller_username=(item.get("seller") or {}).get("username"),
-                    category_id=(item.get("categories") or [{}])[0].get("categoryId")
-                    if item.get("categories") else None,
+                    seller_username=(item.get("seller") or {}).get(
+                        "username"
+                    ),
+                    category_id=(
+                        (item.get("categories") or [{}])[0].get(
+                            "categoryId"
+                        )
+                        if item.get("categories")
+                        else None
+                    ),
                 )
             )
 
