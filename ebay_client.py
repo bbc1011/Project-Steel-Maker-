@@ -20,7 +20,7 @@ class EbayClient:
         self._token = None
         self._expires_at = 0.0
 
-def _get_app_token(self) -> str:
+    def _get_app_token(self) -> str:
     if self._token and time.time() < self._expires_at - 60:
         return self._token
 
